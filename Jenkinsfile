@@ -7,7 +7,7 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = "vivekkhandare/banking-app"
+        IMAGE_NAME = "vivek7296/banking-app"
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
