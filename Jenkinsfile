@@ -16,7 +16,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                url: 'https://github.com/vivek-khandare/banking-app.git'
+                    url: 'https://github.com/vivek-khandare/banking-app.git'
             }
         }
 
@@ -28,23 +28,26 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t $IMAGE_NAME:$IMAGE_TAG .'
+                sh '''
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+                '''
             }
         }
 
         stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
                     sh '''
-                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                    docker push $IMAGE_NAME:$IMAGE_TAG
-                    docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
-                    docker push $IMAGE_NAME:latest
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    docker push ${IMAGE_NAME}:latest
                     docker logout
                     '''
                 }
@@ -52,15 +55,20 @@ pipeline {
         }
 
         stage('Deploy to Kubernetes') {
-    steps {
-        withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
-            sh '''
-            kubectl apply -f k8s/
-            kubectl rollout restart deployment banking-app -n banking
-            '''
+            steps {
+                withCredentials([
+                    file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')
+                ]) {
+                    sh '''
+                    export KUBECONFIG=$KUBECONFIG
+
+                    kubectl apply -f k8s/
+                    kubectl rollout restart deployment/banking-app -n banking
+                    kubectl rollout status deployment/banking-app -n banking --timeout=180s
+                    '''
+                }
+            }
         }
-    }
-}
     }
 
     post {
@@ -70,6 +78,11 @@ pipeline {
 
         failure {
             echo 'Pipeline failed.'
+        }
+
+        always {
+            sh 'docker logout || true'
+            cleanWs()
         }
     }
 }
